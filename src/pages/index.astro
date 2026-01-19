@@ -134,7 +134,7 @@ const tags = ["All", ...new Set(prompts.flatMap((prompt) => prompt.tags))];
       let visibleCount = 0;
       promptData.forEach((prompt) => {
         const isVisible = matches(prompt);
-        prompt.element.toggleAttribute("hidden", !isVisible);
+        prompt.element.classList.toggle("hidden", !isVisible);
         if (isVisible) {
           visibleCount += 1;
         }

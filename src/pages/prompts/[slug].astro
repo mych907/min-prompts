@@ -14,6 +14,6 @@ const { prompt } = Astro.props;
 const { Content } = await prompt.render();
 ---
 
-<MarkdownPostLayout {...prompt.data}>
+<MarkdownPostLayout {...prompt.data} rawBody={prompt.body}>
   <Content />
 </MarkdownPostLayout>

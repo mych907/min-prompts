@@ -1,0 +1,62 @@
+---
+import Layout from "./Layout.astro";
+
+const { title, description, category, tags } = Astro.props;
+const tagList = tags?.join(" ") || "";
+---
+
+<Layout title={title}>
+  <article class="mx-auto max-w-3xl space-y-10">
+    <header class="space-y-4 border-b border-zinc-200 pb-6 dark:border-zinc-800">
+      <div class="flex flex-wrap items-center gap-3 text-xs uppercase tracking-[0.3em] text-zinc-500 dark:text-zinc-400">
+        <span>{category}</span>
+        <span class="text-zinc-300 dark:text-zinc-600">//</span>
+        <span>{tagList}</span>
+      </div>
+      <div>
+        <h1 class="text-3xl font-semibold text-zinc-900 dark:text-zinc-100">{title}</h1>
+        {description && <p class="mt-2 text-base text-zinc-600 dark:text-zinc-400">{description}</p>}
+      </div>
+    </header>
+    <div class="prose prose-zinc max-w-none dark:prose-invert">
+      <slot />
+    </div>
+  </article>
+
+  <script is:inline>
+    const enhanceCodeBlocks = () => {
+      const blocks = document.querySelectorAll("pre");
+      blocks.forEach((block) => {
+        if (block.querySelector("button[data-copy]")) return;
+
+        const wrapper = document.createElement("div");
+        wrapper.className = "relative";
+        block.parentNode.insertBefore(wrapper, block);
+        wrapper.appendChild(block);
+
+        const button = document.createElement("button");
+        button.type = "button";
+        button.dataset.copy = "true";
+        button.textContent = "Copy";
+        button.className =
+          "absolute right-3 top-3 rounded-full border border-zinc-700/60 bg-zinc-900/80 px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-zinc-100 transition hover:border-zinc-400 hover:text-white";
+
+        button.addEventListener("click", async () => {
+          const code = block.querySelector("code");
+          const text = code ? code.textContent : block.textContent;
+          if (!text) return;
+
+          await navigator.clipboard.writeText(text);
+          button.textContent = "Copied";
+          setTimeout(() => {
+            button.textContent = "Copy";
+          }, 1600);
+        });
+
+        wrapper.appendChild(button);
+      });
+    };
+
+    enhanceCodeBlocks();
+  </script>
+</Layout>

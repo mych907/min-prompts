@@ -1,0 +1,181 @@
+---
+import Layout from "../layouts/Layout.astro";
+import PromptCard from "../components/PromptCard.astro";
+
+const prompts = [
+  {
+    title: "Ship a Feature Safely",
+    description: "Risk-driven checklist for shipping features with confidence.",
+    category: "Coding",
+    tags: ["Deploy", "Checklist"],
+    href: "/prompts/ship-feature"
+  },
+  {
+    title: "Incident Postmortem",
+    description: "Structure post-incident notes with clarity and root-cause focus.",
+    category: "DevOps",
+    tags: ["SRE", "Incident"],
+    href: "/prompts/postmortem"
+  },
+  {
+    title: "Clarity in Tech Emails",
+    description: "Turn fuzzy updates into concise engineering status emails.",
+    category: "Writing",
+    tags: ["Email", "Stakeholders"],
+    href: "/prompts/clarity-email"
+  },
+  {
+    title: "Regex Debug Helper",
+    description: "Break down regex step-by-step with reasoning prompts.",
+    category: "Coding",
+    tags: ["Regex", "Python"],
+    href: "/prompts/regex-debug"
+  }
+];
+
+const categories = ["All", ...new Set(prompts.map((prompt) => prompt.category))];
+const tags = ["All", ...new Set(prompts.flatMap((prompt) => prompt.tags))];
+---
+
+<Layout title="Prompt Vault">
+  <section class="grid gap-10 lg:grid-cols-[280px_1fr]">
+    <aside class="space-y-8 rounded-3xl border border-zinc-200 bg-white/60 p-6 shadow-[0_20px_60px_rgba(15,23,42,0.08)] dark:border-zinc-800 dark:bg-zinc-950/60 dark:shadow-[0_20px_60px_rgba(0,0,0,0.45)]">
+      <div class="space-y-4">
+        <p class="text-xs uppercase tracking-[0.3em] text-zinc-500 dark:text-zinc-400">Search</p>
+        <input
+          class="w-full rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-800 shadow-inner shadow-zinc-100/80 focus:border-zinc-400 focus:outline-none dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-100 dark:shadow-none"
+          type="search"
+          placeholder="Find a prompt..."
+          data-search-input
+        />
+      </div>
+      <div class="space-y-4">
+        <p class="text-xs uppercase tracking-[0.3em] text-zinc-500 dark:text-zinc-400">Category</p>
+        <div class="flex flex-wrap gap-2" data-category-filters>
+          {categories.map((category) => (
+            <button
+              type="button"
+              class="rounded-full border border-zinc-200 px-4 py-2 text-[11px] uppercase tracking-[0.2em] text-zinc-600 transition hover:border-zinc-400 hover:text-zinc-900 dark:border-zinc-800 dark:text-zinc-400 dark:hover:border-zinc-600 dark:hover:text-zinc-100"
+              data-category={category}
+            >
+              {category}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div class="space-y-4">
+        <p class="text-xs uppercase tracking-[0.3em] text-zinc-500 dark:text-zinc-400">Tags</p>
+        <div class="flex flex-wrap gap-2" data-tag-filters>
+          {tags.map((tag) => (
+            <button
+              type="button"
+              class="rounded-full border border-zinc-200 px-4 py-2 text-[11px] uppercase tracking-[0.2em] text-zinc-600 transition hover:border-zinc-400 hover:text-zinc-900 dark:border-zinc-800 dark:text-zinc-400 dark:hover:border-zinc-600 dark:hover:text-zinc-100"
+              data-tag={tag}
+            >
+              {tag}
+            </button>
+          ))}
+        </div>
+      </div>
+    </aside>
+    <div class="space-y-8">
+      <div class="flex items-center justify-between">
+        <div>
+          <p class="text-xs uppercase tracking-[0.3em] text-zinc-500 dark:text-zinc-400">Recent Prompts</p>
+          <h2 class="text-2xl font-semibold text-zinc-900 dark:text-zinc-100">Engineering Library</h2>
+        </div>
+        <div class="rounded-full border border-zinc-200 px-4 py-2 text-[11px] uppercase tracking-[0.2em] text-zinc-500 dark:border-zinc-800 dark:text-zinc-400">
+          {prompts.length} prompts
+        </div>
+      </div>
+      <div class="grid gap-6 md:grid-cols-2" data-prompt-grid>
+        {prompts.map((prompt) => (
+          <PromptCard {...prompt} />
+        ))}
+      </div>
+      <p class="text-sm text-zinc-500 dark:text-zinc-400" data-empty-state hidden>
+        No prompts match the current filters.
+      </p>
+    </div>
+  </section>
+
+  <script is:inline>
+    const prompts = Array.from(document.querySelectorAll("[data-prompt-card]"));
+    const promptData = prompts.map((card) => ({
+      element: card,
+      title: card.getAttribute("data-title") || "",
+      description: card.getAttribute("data-description") || "",
+      category: card.getAttribute("data-category") || "",
+      tags: (card.getAttribute("data-tags") || "").split(",")
+    }));
+
+    const searchInput = document.querySelector("[data-search-input]");
+    const categoryButtons = Array.from(document.querySelectorAll("[data-category]"));
+    const tagButtons = Array.from(document.querySelectorAll("[data-tag]"));
+    const emptyState = document.querySelector("[data-empty-state]");
+
+    const state = {
+      query: "",
+      category: "All",
+      tag: "All"
+    };
+
+    const updateActive = (buttons, value, key) => {
+      buttons.forEach((button) => {
+        const isActive = button.getAttribute(`data-${key}`) === value;
+        button.classList.toggle("bg-zinc-900", isActive);
+        button.classList.toggle("text-zinc-100", isActive);
+        button.classList.toggle("border-zinc-900", isActive);
+        button.classList.toggle("dark:bg-zinc-100", isActive);
+        button.classList.toggle("dark:text-zinc-900", isActive);
+        button.classList.toggle("dark:border-zinc-100", isActive);
+      });
+    };
+
+    const matches = (prompt) => {
+      const searchTarget = `${prompt.title} ${prompt.description}`.toLowerCase();
+      const queryMatch = searchTarget.includes(state.query.toLowerCase());
+      const categoryMatch = state.category === "All" || prompt.category === state.category;
+      const tagMatch = state.tag === "All" || prompt.tags.includes(state.tag);
+      return queryMatch && categoryMatch && tagMatch;
+    };
+
+    const applyFilters = () => {
+      let visibleCount = 0;
+      promptData.forEach((prompt) => {
+        const isVisible = matches(prompt);
+        prompt.element.toggleAttribute("hidden", !isVisible);
+        if (isVisible) {
+          visibleCount += 1;
+        }
+      });
+      if (emptyState) {
+        emptyState.toggleAttribute("hidden", visibleCount !== 0);
+      }
+    };
+
+    searchInput?.addEventListener("input", (event) => {
+      state.query = event.target.value;
+      applyFilters();
+    });
+
+    categoryButtons.forEach((button) => {
+      button.addEventListener("click", () => {
+        state.category = button.getAttribute("data-category");
+        updateActive(categoryButtons, state.category, "category");
+        applyFilters();
+      });
+    });
+
+    tagButtons.forEach((button) => {
+      button.addEventListener("click", () => {
+        state.tag = button.getAttribute("data-tag");
+        updateActive(tagButtons, state.tag, "tag");
+        applyFilters();
+      });
+    });
+
+    updateActive(categoryButtons, state.category, "category");
+    updateActive(tagButtons, state.tag, "tag");
+  </script>
+</Layout>

@@ -1,0 +1,79 @@
+---
+import "../styles/global.css";
+
+const { title = "Engineering Prompt Saver" } = Astro.props;
+---
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{title}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body class="bg-zinc-100 text-zinc-900 antialiased dark:bg-zinc-950 dark:text-zinc-100">
+    <div class="min-h-screen bg-gradient-to-br from-zinc-100 via-zinc-100 to-zinc-200 dark:from-zinc-950 dark:via-zinc-950 dark:to-zinc-900">
+      <header class="border-b border-zinc-800/80">
+        <div class="mx-auto flex max-w-6xl items-center justify-between px-6 py-6">
+          <div>
+            <p class="text-xs uppercase tracking-[0.3em] text-zinc-500 dark:text-zinc-400">Prompt Vault</p>
+            <h1 class="text-2xl font-semibold text-zinc-900 dark:text-zinc-50">Engineering Prompt Saver</h1>
+          </div>
+          <button
+            class="rounded-full border border-zinc-300 px-4 py-2 text-xs uppercase tracking-[0.3em] text-zinc-700 transition hover:border-zinc-400 hover:text-zinc-900 dark:border-zinc-700/70 dark:text-zinc-200 dark:hover:border-zinc-500 dark:hover:text-zinc-50"
+            data-theme-toggle
+            aria-pressed="false"
+            aria-label="Toggle dark mode"
+          >
+            Toggle Theme
+          </button>
+        </div>
+      </header>
+      <main class="mx-auto max-w-6xl px-6 py-10">
+        <slot />
+      </main>
+    </div>
+    <script is:inline>
+      const themeToggle = document.querySelector("[data-theme-toggle]");
+      const prefersDark = window.matchMedia("(prefers-color-scheme: dark)");
+      const stored = localStorage.getItem("theme");
+
+      const setTheme = (mode) => {
+        if (mode === "dark") {
+          document.documentElement.classList.add("dark");
+        } else {
+          document.documentElement.classList.remove("dark");
+        }
+        localStorage.setItem("theme", mode);
+        themeToggle?.setAttribute("aria-pressed", mode === "dark" ? "true" : "false");
+      };
+
+      const initTheme = () => {
+        if (stored) {
+          setTheme(stored);
+        } else {
+          setTheme(prefersDark.matches ? "dark" : "light");
+        }
+      };
+
+      initTheme();
+
+      themeToggle?.addEventListener("click", () => {
+        const next = document.documentElement.classList.contains("dark") ? "light" : "dark";
+        setTheme(next);
+      });
+
+      prefersDark.addEventListener("change", (event) => {
+        if (!stored) {
+          setTheme(event.matches ? "dark" : "light");
+        }
+      });
+    </script>
+  </body>
+</html>

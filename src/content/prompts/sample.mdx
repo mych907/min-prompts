@@ -1,22 +1,248 @@
 ---
-layout: ../layouts/MarkdownPostLayout.astro
-title: "Ship a Feature Safely"
-description: "Risk-driven checklist for shipping features with confidence."
+title: "Adversary Agents as Worker and Reviewer"
+description: "Example prompts that use an agent as a worker while another as a reviewer, communicating through .md files"
 category: "Coding"
-tags: ["Deploy", "Checklist"]
+tags: ["Agents", "Review"]
 ---
 
-## Prompt
+## Reviewer Prompt
 
-You are a senior engineer. Provide a step-by-step checklist for shipping a feature safely.
-Include:
-- rollout plan
-- rollback plan
-- monitoring
-- stakeholder updates
+Evaluation metrics review prompt
 
-```bash
-pnpm test
-pnpm lint
-pnpm build
-```
+**Role:**
+You are a Senior Perception Evaluation Engineer and Code Reviewer. You specialize in Radar/Lidar sensor validation, signal processing metrics, and ground truth (GT) analysis.
+
+**Objective:**
+Conduct a comprehensive audit of the provided codebase to verify the implementation of specific evaluation metrics. You must cross-reference the code logic with the requirements listed below and the definitions found in `document/evaluation_api_categories.md`.
+
+**Instructions:**
+
+1.  **Context Analysis:** First, read `document/evaluation_api_categories.md` to understand the mathematical definitions and edge cases for each metric.
+2.  **Code Tracing:** Search the codebase for functions, classes, or scripts corresponding to the criteria list. Do not rely solely on function names; verify the *logic* (e.g., check if "Cluster False Points" actually applies a 40m distance filter as requested).
+3.  **Gap Analysis:** Identify any metrics that are:
+    *   **Missing:** No code found.
+    *   **Partial/Incorrect:** Code exists but lacks specific logic (e.g., missing the "10th percentile" calculation for density).
+    *   **Implemented:** Logic appears correct and complete.
+4.  **Language:** Provide your final report in **[English or Korean - choose your preference]**, but keep the Metric Names exactly as they appear in the criteria list for consistency.
+
+**Evaluation Criteria List (The Checklist):**
+
+*   **Detection + Ghost Filter Evaluation**
+    *   GT Object Detection Rate (P_det)
+    *   Peak Detection Quality (SNR/RCS Peak within Object)
+    *   Ghost Point Ratio/Density (Non-associated points)
+    *   Continuity (Drop rate)
+    *   First-detection Latency (Initial detection distance)
+    *   Multipath - False Point Evaluation (False Positive)
+    *   Freespace - False Point Evaluation (False Positive)
+    *   Cluster - False Point Evaluation (Check if logic limits evaluation to < 40m range)
+    *   Ghost Filter Performance (Pre/Post comparison)
+    *   Detections Saturation Index
+
+*   **Location Accuracy Evaluation**
+    *   Range Error (Point-wise)
+    *   Azimuth/Elevation Angle Error
+    *   Object Centroid Accuracy (Cluster vs. GT BBox Center)
+    *   Heading Accuracy (Cluster vs. GT Heading)
+    *   Static Structure (Plane) Alignment Error
+
+*   **Doppler (Velocity) Evaluation**
+    *   Static Structure Doppler Accuracy (Consistency at 0 velocity)
+    *   Dynamic Object Doppler Accuracy
+    *   Doppler Variance within the same Object
+    *   Doppler-Spatial Consistency
+
+*   **RCS Evaluation**
+    *   RCS Glint Evaluation (Static Objects)
+    *   RCS Glint Evaluation (Dynamic Objects)
+    *   RCS-Range Consistency
+
+*   **Density & Homogeneity Evaluation**
+    *   Points per Object (Median) - Grouped by Class/Range bin
+    *   Lower Bound of Points per Object (10th percentile)
+    *   Angular Cell-based Homogeneity (Cell Coverage)
+    *   Object Surface Homogeneity
+
+**Required Output Format:**
+
+Please present your findings in a Markdown table followed by a summary:
+
+| Category | Metric Name | Status (✅ Implemented / ⚠️ Partial / ❌ Missing) | File/Function Location | Logic Check / Notes |
+| :--- | :--- | :--- | :--- | :--- |
+| Detection | GT Object Detection Rate | ✅ Implemented | `eval_metrics.py`, `calc_p_det()` | Correctly matches GT IDs. |
+| Detection | Cluster - False Point | ⚠️ Partial | `cluster_eval.py` | **Issue:** Logic analyzes all ranges; the < 40m filter is missing. |
+
+**Summary & Recommendations:**
+*   List critical missing components.
+*   Highlight specific logic errors (e.g., where mathematical formulas from the `.md` file are not followed).
+*   Save the result as .md in reports/yyyymmdd_hhmmss_code_review
+---
+
+### Why this structure works better:
+
+1.  **Role Definition:** Sets the expectation that the AI needs to understand sensor physics (SNR, RCS, Doppler), not just generic code.
+2.  **Logic Verification:** The original prompt just asked "if it is implemented." The new prompt specifically asks the AI to check conditions (like the *"< 40m"* note you included), ensuring it doesn't just match keywords but checks the code's behavior.
+3.  **Structured Output:** By forcing a table format, you avoid getting a wall of text. You can immediately see what is `Missing` or `Partial`.
+4.  **Reference Integration:** It explicitly forces the AI to use the `.md` file as the ground truth for *how* the metric should be calculated.
+
+First, review the ... section. (If there are many sections - divide the prompts)
+
+---
+
+## Follow-up prompt
+
+Then, I need to assign an agent to correctly implement the missing and fix the partial implementations. Give me a structured prompt for this job.
+
+## Worker Prompt (Provided by the reviewer prompt)
+
+**Role**
+You are a Senior Perception Evaluation Engineer (Radar/LiDAR) and Python developer. Your job is to implement missing metrics and fix partial/incorrect implementations so the tool matches the definitions in `document/evaluation_api_categories.md`.
+
+**Repository**
+- Root: `c:\Git\afi-evaluation-tool`
+- Runtime entry: `src/evaluator.py`
+- Metric runner: `src/afi_eval/evaluation/evaluator.py::AfiEvaluator`
+- Metrics: `src/afi_eval/evaluation/metrics.py`
+- Current data model: `src/data_structures.py::ScanData`
+- Reference-only implementations (do not assume wired): `sample_code/afi920_ride_eval/*`
+
+**Ground Truth for Definitions**
+- MUST follow: `document/evaluation_api_categories.md`
+- If the code intentionally diverges, either:
+  - align code to the doc, **or**
+  - update doc + add explicit rationale in code comments (choose one; default is align code)
+
+**What Exists Today (Baseline)**
+- Implemented (but partial): Detection P_det, Ghost ratio (simplified), Position accuracy metrics, Dynamic doppler (simplified), RCS CV (generic), Density/Homogeneity (partial).
+- Missing: Many Detection+Ghost metrics, plane-based metrics, static doppler, doppler variance, doppler spatial consistency, RCS static glint, RCS–range consistency, object surface homogeneity spec-aligned.
+
+**Deliverables**
+1. **Code changes** implementing/fixing all items in scope below.
+2. **Unit tests** under `tests/` for every new metric and every changed formula/edge-case.
+3. **Updated report outputs**: include new metric outputs in `report.json` and summary where appropriate (`src/report_generator.py`).
+4. **New audit note** in `reports/<timestamp>_implementation_notes.md` describing what changed and why (brief).
+5. Ensure `python -m pytest` passes.
+
+---
+
+## Scope: Implement/Fix These Metrics (Use Metric Names Exactly)
+
+### A) Detection + Ghost Filter Evaluation
+Implement in runtime (not just `sample_code/`):
+
+- **Peak Detection Quality (SNR/RCS Peak within Object)**
+  - Compute per-object: `SNR_max`, `SNR_topK_mean(K=3)`, `RCS_max`, `RCS_topK_mean`
+  - Aggregate by class × range bin × mode
+
+- **Ghost Point Ratio/Density (Non-associated points)**
+  - Must distinguish ghost vs object/plane/freespace association per doc
+  - Add density outputs: pts/sec, pts/km, pts/m² (define required inputs or document assumptions)
+
+- **Continuity (Drop rate)**
+  - Implement spec: drop event = consecutive miss ≥ K frames (default K=3)
+  - Track-level stats: drop_rate, drop_events/km, longest_gap
+
+- **First-detection Latency (Initial detection distance)**
+  - Track-level: latency (ms), first_detect_range(m)
+  - Requires ROI entry time definition per doc
+
+- **Multipath - False Point Evaluation (False Positive)**
+  - Plane-behind classification per doc (signed distance behind plane)
+
+- **Freespace - False Point Evaluation (False Positive)**
+  - Drivable/freespace grid-based FP density/ratio per doc
+
+- **Cluster - False Point Evaluation (Check if logic limits evaluation to < 40m range)**
+  - DBSCAN on ghost points with explicit r ≤ 40 m gating
+  - Outputs: FP_cluster/km, cluster size distribution, persistence(frames)
+
+- **Ghost Filter Performance (Pre/Post comparison)**
+  - Run two evaluations (OFF vs ON) or accept two report inputs and compute deltas: ΔRecall, ΔFP_* etc.
+
+- **Detections Saturation Index**
+  - sat_ratio, sat_frames/km, flag for N_all ≥ 0.95×2000, and correlation hooks vs Recall/FP
+
+Also fix partial/incorrect:
+- **GT Object Detection Rate (P_det)**: ensure logic matches doc (time sync, ROI, N_min, margins, and whether N_occ is part of spec).
+- **Time sync**: enforce `|Δt| ≤ 0.05s` or explicitly justify why `selected_frames.json` guarantees it (and validate).
+
+### B) Location Accuracy Evaluation
+Fix/implement:
+- **Range Error (Point-wise)**: remove undocumented gating or make it configurable + report outlier rate.
+- **Azimuth/Elevation Angle Error**: same gating handling.
+- **Object Centroid Accuracy (Cluster vs. GT BBox Center)**: either implement clustering or rename/clarify; match spec conditions (e.g., N_obj ≥ 3).
+- **Heading Accuracy (Cluster vs. GT Heading)**: implement `N_heading ≥ 5` (configurable), add outlier rejection before PCA, clarify ambiguity resolution.
+- **Static Structure (Plane) Alignment Error**: implement plane association + distance stats per doc.
+
+### C) Doppler (Velocity) Evaluation
+Implement in runtime:
+- **Static Structure Doppler Accuracy (Consistency at 0 velocity)**
+- **Doppler Variance within the same Object** (MAD-based σ_v preferred)
+- **Doppler-Spatial Consistency** (mismatch_ratio with v0=0.3 m/s, sign defined by median)
+
+Fix partial:
+- **Dynamic Object Doppler Accuracy**: incorporate ego compensation if ego inputs exist; otherwise clearly flag limitations and match doc as closely as possible.
+
+### D) RCS Evaluation
+Implement/fix:
+- **RCS Glint Evaluation (Static Objects)**: static targets (plane recommended), CV/IQR over time, enforce N_frames≥20, TopK SNR selection.
+- **RCS Glint Evaluation (Dynamic Objects)**: track-based glint, class×range bin aggregation, spec gating.
+- **RCS-Range Consistency**: Spearman ρ and/or regression slope; plane-based recommended.
+
+### E) Density & Homogeneity Evaluation
+Fix/implement:
+- **Points per Object (Median)**: class×range bin×mode outputs; optional `N_obj/N_max`.
+- **Lower Bound of Points per Object (10th percentile)**: add fail_rate vs N_min and sample-size guard.
+- **Angular Cell-based Homogeneity (Cell Coverage)**: add p10 coverage (and optional empty_ratio).
+- **Object Surface Homogeneity**: compute CV/entropy/gini over full grid including zero cells (not occupied-only).
+
+---
+
+## Required Architecture Changes (If Needed)
+If the spec requires data not present in `ScanData`, you MUST extend the data model and parser:
+- Add to `ScanData`:
+  - `lidar_planes` (GT planes)
+  - `drivable_region` / freespace grid
+  - ego motion: `ego_vel_xy`, optional `yaw_rate`
+  - timestamps for radar/lidar frames (for dt checks)
+- Update `src/data_parser.py` to populate these fields from available inputs (or add TODO + graceful handling if dataset lacks them).
+
+**Constraint**
+Do not break the current “sample_data” runnable flow. If some inputs aren’t available in sample_data, metrics should return `nan`/empty with explicit reason strings in the report.
+
+---
+
+## Acceptance Criteria
+- Every metric in the checklist is either:
+  - ✅ implemented per doc, or
+  - returns explicit “not computable” output with a clear reason (only acceptable when required inputs truly do not exist in provided data)
+- All metrics appear under `report.json` in stable keys.
+- Unit tests cover:
+  - numerical correctness on small synthetic scenes
+  - edge cases: no points, no objects, missing planes, low sample counts, dt violations, extreme angles
+- No hard-coded magic thresholds unless they are in config (e.g., v0=0.3, K=3, 40m) and defaulted to doc values.
+
+---
+
+## Work Plan (Expected)
+1. Read `document/evaluation_api_categories.md` and extract exact formulas + gates.
+2. Map each metric to runtime code path; do not rely on names.
+3. Implement missing data plumbing (ScanData + parser) first.
+4. Implement metrics with config-driven thresholds.
+5. Add tests for each metric.
+6. Run `pytest`, run `python src/evaluator.py` on sample_data, confirm report contains new keys.
+
+---
+
+## Useful References in Repo
+- Current implementations:
+  - `src/afi_eval/evaluation/metrics.py` (`DetectionMetrics`, `PositionAccuracyMetrics`, `DopplerMetrics`, `RcsMetrics`, `DensityHomogeneityMetrics`)
+- Reference-only implementations (can be ported, but must adapt to runtime types):
+  - `sample_code/afi920_ride_eval/sheet_detection_ghost_filter.py`
+  - `sample_code/afi920_ride_eval/sheet_position_accuracy.py`
+  - `sample_code/afi920_ride_eval/sheet_doppler_velocity.py`
+  - `sample_code/afi920_ride_eval/sheet_rcs.py`
+  - `sample_code/afi920_ride_eval/sheet_density_homogeneity.py`
+
+**Output requested from you (the agent)**
+- A PR-ready implementation with tests and a short summary of changes + how to validate.

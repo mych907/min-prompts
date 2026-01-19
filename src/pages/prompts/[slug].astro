@@ -1,0 +1,19 @@
+---
+import MarkdownPostLayout from "../../layouts/MarkdownPostLayout.astro";
+import { getCollection } from "astro:content";
+
+export async function getStaticPaths() {
+  const prompts = await getCollection("prompts");
+  return prompts.map((prompt) => ({
+    params: { slug: prompt.slug },
+    props: { prompt }
+  }));
+}
+
+const { prompt } = Astro.props;
+const { Content } = await prompt.render();
+---
+
+<MarkdownPostLayout {...prompt.data}>
+  <Content />
+</MarkdownPostLayout>

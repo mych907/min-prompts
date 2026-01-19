@@ -1,37 +1,16 @@
 ---
 import Layout from "../layouts/Layout.astro";
 import PromptCard from "../components/PromptCard.astro";
+import { getCollection } from "astro:content";
 
-const prompts = [
-  {
-    title: "Ship a Feature Safely",
-    description: "Risk-driven checklist for shipping features with confidence.",
-    category: "Coding",
-    tags: ["Deploy", "Checklist"],
-    href: "/prompts/ship-feature"
-  },
-  {
-    title: "Incident Postmortem",
-    description: "Structure post-incident notes with clarity and root-cause focus.",
-    category: "DevOps",
-    tags: ["SRE", "Incident"],
-    href: "/prompts/postmortem"
-  },
-  {
-    title: "Clarity in Tech Emails",
-    description: "Turn fuzzy updates into concise engineering status emails.",
-    category: "Writing",
-    tags: ["Email", "Stakeholders"],
-    href: "/prompts/clarity-email"
-  },
-  {
-    title: "Regex Debug Helper",
-    description: "Break down regex step-by-step with reasoning prompts.",
-    category: "Coding",
-    tags: ["Regex", "Python"],
-    href: "/prompts/regex-debug"
-  }
-];
+const entries = await getCollection("prompts");
+const prompts = entries.map((entry) => ({
+  title: entry.data.title,
+  description: entry.data.description,
+  category: entry.data.category,
+  tags: entry.data.tags,
+  href: `/prompts/${entry.slug}`
+}));
 
 const categories = ["All", ...new Set(prompts.map((prompt) => prompt.category))];
 const tags = ["All", ...new Set(prompts.flatMap((prompt) => prompt.tags))];

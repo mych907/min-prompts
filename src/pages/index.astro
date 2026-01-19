@@ -36,6 +36,7 @@ const tags = ["All", ...new Set(prompts.flatMap((prompt) => prompt.tags))];
               type="button"
               class="rounded-full border border-zinc-200 px-4 py-2 text-[11px] uppercase tracking-[0.2em] text-zinc-600 transition hover:border-zinc-400 hover:text-zinc-900 dark:border-zinc-800 dark:text-zinc-400 dark:hover:border-zinc-600 dark:hover:text-zinc-100"
               data-category={category}
+              data-category-filter
             >
               {category}
             </button>
@@ -50,6 +51,7 @@ const tags = ["All", ...new Set(prompts.flatMap((prompt) => prompt.tags))];
               type="button"
               class="rounded-full border border-zinc-200 px-4 py-2 text-[11px] uppercase tracking-[0.2em] text-zinc-600 transition hover:border-zinc-400 hover:text-zinc-900 dark:border-zinc-800 dark:text-zinc-400 dark:hover:border-zinc-600 dark:hover:text-zinc-100"
               data-tag={tag}
+              data-tag-filter
             >
               {tag}
             </button>
@@ -89,8 +91,8 @@ const tags = ["All", ...new Set(prompts.flatMap((prompt) => prompt.tags))];
     }));
 
     const searchInput = document.querySelector("[data-search-input]");
-    const categoryButtons = Array.from(document.querySelectorAll("[data-category]"));
-    const tagButtons = Array.from(document.querySelectorAll("[data-tag]"));
+    const categoryButtons = Array.from(document.querySelectorAll("[data-category-filter]"));
+    const tagButtons = Array.from(document.querySelectorAll("[data-tag-filter]"));
     const emptyState = document.querySelector("[data-empty-state]");
 
     const state = {
@@ -108,7 +110,16 @@ const tags = ["All", ...new Set(prompts.flatMap((prompt) => prompt.tags))];
         button.classList.toggle("dark:bg-zinc-100", isActive);
         button.classList.toggle("dark:text-zinc-900", isActive);
         button.classList.toggle("dark:border-zinc-100", isActive);
+        button.classList.toggle("is-active", isActive);
       });
+    };
+
+    const resetFilters = () => {
+      state.category = "All";
+      state.tag = "All";
+      updateActive(categoryButtons, state.category, "category");
+      updateActive(tagButtons, state.tag, "tag");
+      applyFilters();
     };
 
     const matches = (prompt) => {
@@ -156,5 +167,24 @@ const tags = ["All", ...new Set(prompts.flatMap((prompt) => prompt.tags))];
 
     updateActive(categoryButtons, state.category, "category");
     updateActive(tagButtons, state.tag, "tag");
+    applyFilters();
+
+    const clearStaleFilters = () => {
+      const activeCategory = document.querySelector("[data-category-filter].is-active");
+      const activeTag = document.querySelector("[data-tag-filter].is-active");
+      if (!activeCategory && !activeTag) return;
+
+      const hasFragmentFilter = window.location.hash.includes("category=") ||
+        window.location.hash.includes("tag=");
+      if (!hasFragmentFilter) {
+        resetFilters();
+      }
+    };
+
+    window.addEventListener("pageshow", (event) => {
+      if (event.persisted) {
+        clearStaleFilters();
+      }
+    });
   </script>
 </Layout>

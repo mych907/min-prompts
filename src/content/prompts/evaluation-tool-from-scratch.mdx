@@ -1,0 +1,33 @@
+---
+title: "Evaluation Tool from Scratch"
+description: "Human written prompt to implement a specifical purpose evaluation tool"
+category: "Coding"
+tags: ["Agents", "Radar", "Evaluation", "Human Written"]
+---
+
+## AFI evaluation prompt
+
+The afi evaluation tool is an evaluation system for radar pointclouds, using pre labelled data collected along with Lidar objects as GT. (Other than lidar objects, there are perception data such as static structure, freespace, etc)
+
+### General instructions
+
+Implement with simple, easy to use interface the evaulation metrics as described in the documents below.
+
+- In document/evaluation_api_categories.md, the five categories of evaluation are arranged.
+- sample_code/afi920_ride_eval folder contains the sample python code implemented, with 1to1 matching per each of the five categories:
+    Detection (+Ghost Filter), position accuracy, doppler, rcs, density and homogeneity.
+- You can use these codes directly for the implementation, or implement from scratch if not satisfactory.
+- Refer to the dataclass predefined in src/data_structures.py for input data structure.
+- Separate configuration parameters such as gating size into a separate json file.
+- Implement a simple coordinate transformation function (currently set to all 0). Will later import cal data from meta file, but for now just zeros.
+- Assume all data's time is already synchronized.
+
+### Commit rule
+You may commit your changes at milestones, with the following template, with the Ticket id RDR-106.
+```
+<Ticket> <type>(<scope>): add simple commit message
+
+-[Why]
+
+-[What]
+```

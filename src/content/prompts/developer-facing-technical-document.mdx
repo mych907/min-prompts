@@ -1,0 +1,79 @@
+---
+title: "Developer-facing Technical Document"
+description: "Example prompt to create engineering technical document. Specifically written for evaluation API codebase."
+category: "Coding"
+tags: ["Agents", "Web", "Vercel"]
+---
+
+Create a **developer-facing technical document** that explains how each **evaluation API** in this codebase is implemented at the code level.
+
+**Goal**
+
+* Help an engineer quickly understand *how the evaluation logic works internally*
+* Serve as a **formal code documentation artifact** suitable for review or submission
+
+**Format**
+
+* Output **Markdown**
+* Structured, concise, and skimmable
+* Written for engineers (not users)
+
+**For each evaluation API, include:**
+
+1. **Purpose & Scope**
+
+   * What this evaluation measures
+   * When and why it is used
+2. **Public Interface**
+
+   * Function/class name
+   * Inputs (types, shapes, units, assumptions)
+   * Outputs (types, units, aggregation rules)
+3. **Internal Implementation**
+
+   * Step-by-step logic flow
+   * Key algorithms or formulas
+   * Important thresholds, constants, or heuristics
+4. **Data Flow**
+
+   * How data enters, is transformed, and exits
+   * Dependencies on other modules or shared utilities
+5. **Edge Cases & Failure Modes**
+
+   * Invalid inputs
+   * Missing data
+   * Numerical or logical pitfalls
+6. **Performance Characteristics**
+
+   * Time / space complexity (qualitative is fine)
+   * Known bottlenecks or scaling concerns
+7. **Design Rationale**
+
+   * Why this approach was chosen
+   * Trade-offs vs alternative implementations
+8. **Example**
+
+   * Minimal, realistic usage example (pseudo-code or real code)
+
+**Global Sections**
+
+* High-level architecture of the evaluation layer
+* Common patterns shared across evaluation APIs
+* Known limitations and TODOs
+
+**Style Guidelines**
+
+* No marketing language
+* Prefer concrete explanations over abstraction
+* Assume the reader can read code but hasn’t seen this project before
+* Avoid repeating obvious code comments unless they add context
+
+**Do not**
+
+* Explain basic Python syntax
+* Restate function names without explanation
+* Add speculative behavior not present in the code
+
+
+> If an implementation is unclear or inconsistent, explicitly call it out instead of guessing.
+

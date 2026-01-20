@@ -1,0 +1,336 @@
+---
+title: "Unified AI Usage Monitor"
+description: "Build lightweight unified AI usage monitor for multiple AI tools"
+category: "Coding"
+tags: ["Agents", "AI", "Monitoring", "Usage"]
+---
+
+## Prompt for AI Agent: Unified AI Usage Monitor (Lightweight, Extendable)
+
+You are an engineering agent. Build a local, lightweight app that aggregates usage/cap info across multiple AI tools I use:
+
+* OpenAI Codex usage page: `https://chatgpt.com/codex/settings/usage`
+* Cursor usage dashboard: `https://cursor.com/dashboard`
+* Gemini API (free plan; I hit cap using “Gemini 3 Flash”): I don’t know where to view usage/caps. You must research and implement the best available monitoring method(s).
+* Must be extendable to add “Claude Code” later with minimal changes.
+
+### High-level goal
+
+A single command produces a unified view: “what I used today / this week / this month” and “how close to caps am I” for each tool.
+
+### Non-goals / constraints
+
+* **No observability stack** (no Grafana/Prometheus/Influx/etc.).
+* Runtime must be **very light**: should not require a constantly-running daemon. Prefer “run on demand” and optionally a tiny local server.
+* Implementation time can be heavier; runtime should stay small.
+* Must be reasonably robust to UI changes for scraped sources.
+* Prefer cross-platform: Windows + Linux.
+
+---
+
+# 1) UX requirements
+
+## 1.1 CLI (required)
+
+Create a CLI tool named `ai-usage` with commands:
+
+1. `ai-usage pull`
+
+* Fetch latest usage/cap info for each configured provider.
+* Store a timestamped snapshot locally.
+
+2. `ai-usage report`
+
+* Print a consolidated summary to terminal (table).
+* Show at minimum:
+
+  * Provider name
+  * Current period usage (today/week/month if available)
+  * Remaining quota / reset time if available
+  * Last successful fetch time
+  * Errors/warnings (auth expired, parsing failed, etc.)
+
+3. `ai-usage report --format json`
+
+* Output normalized JSON for scripting.
+
+4. `ai-usage serve` (optional but recommended)
+
+* Start a tiny local web UI on localhost to browse history.
+* Must not run unless explicitly invoked.
+
+## 1.2 Web UI (optional but recommended)
+
+If implemented, it should be minimal:
+
+* Single page, no heavy framework required.
+* Show:
+
+  * Current status cards per provider
+  * History chart per provider (simple line charts; can be client-side)
+  * Error log per provider
+* If you can do a zero-build UI (plain HTML + minimal JS), do that.
+
+## 1.3 Alerts (optional)
+
+If implemented, keep it lightweight:
+
+* `ai-usage check --threshold 0.8` exits non-zero when any provider exceeds threshold usage.
+* Optionally support notifications via:
+
+  * stdout only (default)
+  * Slack webhook (optional)
+  * Email (optional, only if easy)
+
+---
+
+# 2) Architecture (must be extendable)
+
+Implement a plugin-style adapter interface:
+
+```text
+ProviderAdapter:
+  id: str                      # e.g. "openai_codex", "cursor", "gemini"
+  display_name: str
+  auth_kind: enum              # "cookie", "oauth", "api_key", "none"
+  fetch(snapshot_context) -> ProviderSnapshot
+```
+
+### 2.1 Normalized data model
+
+Define a normalized schema so every provider maps into it:
+
+```json
+ProviderSnapshot {
+  "provider_id": "cursor",
+  "captured_at": "ISO-8601",
+  "account_label": "optional",
+  "periods": {
+    "day":   {"used": number|null, "limit": number|null, "unit": "requests|tokens|USD|messages|unknown", "reset_at": "ISO|null"},
+    "week":  {...},
+    "month": {...}
+  },
+  "raw": { ... provider-specific ... },
+  "meta": {
+    "fetch_ms": number,
+    "source": "api|scrape",
+    "version": "parser version"
+  }
+}
+```
+
+Notes:
+
+* Many providers won’t expose tokens. Accept “messages”, “requests”, or “unknown”.
+* If limits are unknown, still store “used” and whatever hints exist (e.g., “cap reached”, “resets in X hours”).
+* Store `raw` payload to help future parser improvements.
+
+### 2.2 Storage
+
+Use **SQLite** (required) for snapshots + logs.
+
+Tables:
+
+* `snapshots(provider_id TEXT, captured_at TEXT, json TEXT)`
+* `fetch_log(provider_id TEXT, captured_at TEXT, status TEXT, message TEXT, debug_json TEXT)`
+
+Keep it simple. Use WAL mode for durability.
+
+### 2.3 Runtime profile
+
+Default runtime:
+
+* `ai-usage pull` runs, stores snapshot, exits.
+  No background processes.
+
+User can schedule it with OS scheduler (Windows Task Scheduler / cron). Provide instructions.
+
+---
+
+# 3) Provider-specific requirements
+
+## 3.1 OpenAI Codex usage (chatgpt.com codex usage page)
+
+* There may not be a public API.
+* Implement as a “scrape adapter” using a headless browser when needed.
+* Requirements:
+
+  * Use Playwright (preferred) or Selenium (fallback).
+  * Support login via **existing browser session cookies** to avoid storing passwords.
+  * Provide a setup flow:
+
+    * user exports cookies to a file OR
+    * tool launches a browser for manual login once, then saves an auth state (Playwright storage state).
+* Extract usage values and reset times from DOM/network responses.
+* Robustness:
+
+  * Prefer intercepting underlying XHR/GraphQL responses rather than parsing fragile DOM text.
+  * Store the captured network JSON in `raw`.
+
+## 3.2 Cursor usage dashboard
+
+Same approach:
+
+* Prefer network interception if the dashboard calls an API endpoint.
+* Auth likely via session cookies.
+* Implement login once, persist storage state.
+
+## 3.3 Gemini (free plan) usage/cap monitoring
+
+This is the most ambiguous part: you must research and implement the best monitoring route(s). Deliver the best available given constraints.
+
+Implementation requirements:
+
+* Add a discovery doc in repo: `docs/gemini_monitoring.md` that explains:
+
+  * Where usage is visible in UI (if applicable)
+  * Any APIs available (if applicable)
+  * If only approximate, clearly state limitations
+
+Possible strategies (pick best after research):
+
+* If there is an AI Studio / console usage page with quotas: scrape + parse like above.
+* If it’s Google Cloud project-based: use Google Cloud APIs to pull quota/usage (Monitoring/Billing) *only if it can work without heavy setup*.
+* If free plan caps are not exposed numerically, detect “cap reached” + “reset time” from UI and store those signals.
+
+You must implement *something useful* even if imperfect:
+
+* At minimum: status = OK / CAPPED, plus reset estimate if visible.
+
+## 3.4 Future: Claude Code adapter stub
+
+Create `providers/claude_code.py` as a stub with TODOs and clear extension points. Do not implement unless trivial.
+
+---
+
+# 4) Security & secrets
+
+* Do not store passwords.
+* If using Playwright storage state, store it under `~/.ai-usage/` (or platform equivalent) with tight permissions.
+* Provide a command `ai-usage auth <provider>` to initialize login state.
+* Provide a command `ai-usage auth --clear <provider>` to delete auth state.
+
+---
+
+# 5) Error handling & robustness
+
+* Each provider fetch must be isolated: failure in one provider must not break others.
+* Store error logs in SQLite with enough detail to debug.
+* Implement parser versioning so schema changes don’t break old snapshots.
+
+Backoff behavior:
+
+* None needed (no daemon). For `pull`, just try once and log.
+
+---
+
+# 6) Project setup & deliverables
+
+## 6.1 Tech choices (default)
+
+* Language: Python 3.11+ (or 3.10+ if needed)
+* Packaging: `uv` preferred (fast installs)
+* Libraries:
+
+  * Playwright for scraping
+  * SQLite (stdlib `sqlite3` OK)
+  * Rich (optional) for CLI tables
+  * FastAPI (optional) for `serve`, but keep it minimal; alternatively serve static HTML with `http.server`.
+
+## 6.2 Repo layout
+
+```text
+ai_usage/
+  cli.py
+  config.py
+  db.py
+  models.py
+  providers/
+    base.py
+    openai_codex.py
+    cursor.py
+    gemini.py
+    claude_code.py (stub)
+  web/
+    serve.py (optional)
+    static/ (optional)
+docs/
+  gemini_monitoring.md
+README.md
+pyproject.toml
+```
+
+## 6.3 README requirements
+
+* Quickstart:
+
+  * install
+  * auth per provider
+  * run pull/report
+  * schedule with cron / task scheduler
+* Troubleshooting:
+
+  * auth expired
+  * Playwright browser install
+  * provider UI changes
+* Data privacy notes: everything stays local.
+
+---
+
+# 7) Acceptance criteria (must pass)
+
+1. `ai-usage pull` works on Windows + Linux and stores snapshots in SQLite.
+2. `ai-usage report` shows consolidated output for at least:
+
+   * OpenAI Codex usage page
+   * Cursor dashboard
+   * Gemini usage in *some meaningful form* (even if only capped/not capped + reset)
+3. System is extendable: adding a new provider is a new file implementing adapter + a registry entry.
+4. No always-on services required; default usage is pull-and-exit.
+5. Clear documentation for auth setup without storing passwords.
+
+---
+
+# 8) Work plan you should follow (agent instructions)
+
+1. Recon:
+
+   * For each provider, manually inspect login and identify whether data is accessible via stable API calls.
+   * Prefer capturing network responses over DOM parsing.
+
+2. Build core:
+
+   * SQLite layer
+   * normalized snapshot model
+   * CLI skeleton
+
+3. Implement auth workflow:
+
+   * Playwright storage state per provider
+   * `ai-usage auth`
+
+4. Implement each provider adapter:
+
+   * OpenAI Codex
+   * Cursor
+   * Gemini (research + implement best feasible approach)
+
+5. Add reporting:
+
+   * terminal table + JSON output
+   * simple history query for last N snapshots
+
+6. Optional web:
+
+   * minimal static UI from stored snapshots
+
+7. Tests:
+
+   * unit tests for parsers with saved fixtures
+   * integration test mode that runs fetchers if auth present
+
+---
+
+If you need to make assumptions, document them and choose defaults that minimize runtime and user friction.
+
+Deliver the final result as a working repo with instructions.

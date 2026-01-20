@@ -1,0 +1,151 @@
+---
+title: "Complex Multiple Tasks"
+description: "Modify the python codebase to divide the process of generating a large json file into small multiple files."
+category: "Coding"
+tags: ["Agents", "Evaluation"]
+---
+
+
+## Raw prompt
+I noticed that the report.json file is extremely long and is difficult to open. Write a prompt for an ai agent to modify the codebase so that 1 json is divided separate files for each category (e.g., detection, position accuracy, doppler accuracy, etc) and to modify the report_json_to_html.py to correctly read the separated json files into a single html. Also, another task is to include the score metrics in the summary.md.
+
+### Prompt for AI agent: Split `report.json` per category + update HTML + add score to `summary.md`
+
+You are working in repo `c:\Git\afi-evaluation-tool`.
+
+#### Objective
+Make the evaluation outputs easier to open and consume by:
+1. **Splitting the monolithic `report.json` into multiple JSON files**, one per metric category (detection, position accuracy, doppler, rcs, density/homogeneity, etc.).
+2. Updating `tools/report_json_to_html.py` so it can **read the split JSON files and still generate one single `report.html`** dashboard.
+3. Including the **score metrics (the same “Total Score” + requirement statuses used in HTML)** in `summary.md`.
+
+#### Current context (what exists today)
+- Reports are written by `src/report_generator.py::ReportGenerator.write()` (and `generate_report()`).
+  - It writes:
+    - `report.json` (strict JSON, NaN/Inf sanitized to `null`)
+    - `summary.md`
+  - It also runs HTML generation via `tools/report_json_to_html.py` (subprocess) to create `report.html`.
+- HTML generator `tools/report_json_to_html.py` currently:
+  - Reads **one** JSON file via `--input <report.json>`
+  - Builds figures from `report["metrics"][...]`
+  - Computes pass/fail + total score via `_compute_requirements()` / `_compute_total_score()`
+- Metrics categories live under `report["metrics"]` with keys like:
+  - `detection`, `position_accuracy`, `doppler`, `rcs`, `density_homogeneity`
+
+#### Requirements (must-have)
+##### A) Output format on disk (new)
+In each `reports/<timestamp>_<scenario>/` folder, write:
+- `report_meta.json` (small, always present)
+  - Contains:
+    - `report_schema_version` (if present today)
+    - `generated_at` timestamp
+    - `scenario_name`
+    - `config_path`
+    - list/map of metric category files (see below)
+- `metrics/` directory containing one JSON per metric category:
+  - `metrics/detection.json`
+  - `metrics/position_accuracy.json`
+  - `metrics/doppler.json`
+  - `metrics/rcs.json`
+  - `metrics/density_homogeneity.json`
+  - (If new categories exist later, they should automatically be written as `<metric_name>.json`.)
+- Optional but recommended for backward compatibility: keep writing the legacy monolithic `report.json` behind a config/flag (default can be either; decide but document it).
+
+##### B) Strict JSON
+- Preserve current strict JSON behavior:
+  - `NaN` / `±Inf` must become `null`
+  - Use `allow_nan=False`
+- The split files must also be sanitized.
+
+##### C) HTML generator must read split JSON
+Update `tools/report_json_to_html.py` to support both:
+- **Legacy mode**: `--input <report.json>` still works.
+- **Split mode** (new):
+  - `--input-meta <report_meta.json>` (preferred)
+  - Or `--input-dir <report_folder>` (derive paths)
+- In split mode:
+  - Load `report_meta.json` and each `metrics/*.json`
+  - Reconstruct the in-memory structure equivalent to legacy:
+    - `report = { ...meta..., "metrics": { "detection": <dict>, ... } }`
+  - Then reuse the existing plotting functions (minimal duplication).
+
+##### D) “Score metrics” must be added to `summary.md`
+- `summary.md` should include:
+  - Total Score (0–100)
+  - The requirement table entries (name/value/threshold/status/note) in text form
+- The scores must be **computed from the same logic used by HTML**, not a second inconsistent implementation.
+  - Best approach: refactor scoring code into a shared module, e.g. `src/report_scoring.py` (pure Python, no Plotly), imported by both:
+    - `tools/report_json_to_html.py`
+    - `src/report_generator.py`
+  - Keep the scoring function signature stable, e.g. `compute_requirements(report_dict) -> list[...]` and `compute_total_score(reqs) -> float`.
+
+#### Requirements (nice-to-have)
+- Add a short “Files” section in `summary.md` listing:
+  - `report_meta.json`
+  - `metrics/*.json`
+  - `report.html`
+- Add a CLI help text update in `README.md` describing split outputs.
+- Add a small “migration note”: HTML accepts either old `report.json` or new split format.
+
+#### Implementation steps (suggested)
+1. **Introduce a small report container layout**
+   - In `src/report_generator.py`, create helpers:
+     - `_write_json(path, obj)` using `_sanitize_for_json()`
+     - `_ensure_report_dir()`, `_ensure_metrics_dir()`
+2. **Change report writing**
+   - Replace single `report.json` write with:
+     - `report_meta.json`
+     - `metrics/<name>.json` for each `report["metrics"][name]`
+   - Decide whether to also write legacy `report.json`:
+     - If yes, gate with a parameter like `write_legacy_combined_json: bool = False/True`.
+3. **Update HTML generation subprocess call**
+   - In `src/report_generator.py::_build_html_report()`, call:
+     - `python tools/report_json_to_html.py --input-meta <report_meta.json> --output <report.html>`
+   - Keep it best-effort (never fail evaluation).
+4. **Refactor scoring logic**
+   - Move `_compute_requirements` / `_compute_total_score` into `src/report_scoring.py` (no Plotly imports).
+   - Update HTML tool to import from that module.
+   - Update `ReportGenerator._build_summary_md()` to call the same scoring functions and print:
+     - Total score line
+     - Requirements list with PASS/FAIL/N/A
+5. **Update `tools/report_json_to_html.py` loader**
+   - Add loader functions:
+     - `_read_report_legacy_json(path)`
+     - `_read_report_split(meta_path)` or `_read_report_split_dir(dir_path)`
+   - Ensure it reconstructs a `report` dict with `metrics` so plotting code remains unchanged.
+6. **Guardrails**
+   - If a metric JSON is missing, treat it as empty dict and omit its plots.
+   - If meta references a missing file, show a warning and continue.
+   - Keep output deterministic and stable ordering where possible.
+
+#### Acceptance criteria
+- Running evaluation produces a report folder containing:
+  - `report_meta.json`
+  - `metrics/*.json` (one per category present)
+  - `summary.md` that now includes Total Score + requirement status lines
+  - `report.html` that correctly shows the same graphs as before
+- `tools/report_json_to_html.py` works in both modes:
+  - `--input report.json` (legacy)
+  - `--input-meta report_meta.json` (new)
+- JSON remains strict (no NaN/Inf tokens).
+- If Doppler scatter has no valid data pairs, it is omitted (keep the recent robustness behavior).
+
+#### Testing plan
+- Unit tests (preferred):
+  - Add/update tests to validate:
+    - Split JSON files exist and are valid JSON
+    - Meta references correct metric files
+    - Reconstructed report dict from split equals (or is compatible with) legacy structure
+    - `summary.md` contains Total Score and requirement rows
+- Manual smoke test (if environment permits):
+  - Generate report, open `report.html`, verify plots render.
+
+#### Deliverables
+- Code changes in:
+  - `src/report_generator.py`
+  - `tools/report_json_to_html.py`
+  - New `src/report_scoring.py` (or similar shared module)
+  - Tests + README update if you implement nice-to-haves
+- Ensure everything runs on Windows (PowerShell) and paths are handled via `pathlib.Path`.
+
+Make changes directly in the codebase and keep the implementation minimal, robust, and backward-compatible where practical.

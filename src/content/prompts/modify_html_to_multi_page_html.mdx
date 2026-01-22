@@ -1,0 +1,116 @@
+---
+title: "Modify HTML to Multi-page HTML"
+description: "Modify a python script that outputs a single html report to generate multiple page html."
+category: "Coding"
+tags: ["Agents", "Radar", "Evaluation", "Raw"]
+---
+
+## Raw Prompt
+
+Instead of generating a single output html file, the managers want the output to be muliple pages. The overall score and P/F summary on the first page, then links for the five criteria (detection, position accuracy, etc) linking to a different page dedicated to each. Write a prompt for an ai agent that have access to this repo to make these changes.
+
+## Prompt for AI agent (multi-page report HTML)
+
+You have access to the repo at `c:\Git\afi-evaluation-tool` (Windows). Implement **multi-page HTML output** for the evaluation report while preserving existing split JSON support and scoring consistency.
+
+### Objective
+Replace the current single-file `report.html` dashboard with a **multi-page HTML report**:
+
+- **Index page** (`report.html`):
+  - Shows **Total Score gauge** and **Pass/Fail requirements table** (same logic/data as today)
+  - Shows high-level report metadata (scenario, generated_at, versions)
+  - Shows **links/cards** to each metric category page:
+    - Detection
+    - Position accuracy
+    - Doppler
+    - RCS
+    - Density & homogeneity
+
+- **Category pages** (one per metric category):
+  - Dedicated page containing only that category’s plots/sections
+  - Example filenames (stable, deterministic):
+    - `report_detection.html`
+    - `report_position_accuracy.html`
+    - `report_doppler.html`
+    - `report_rcs.html`
+    - `report_density_homogeneity.html`
+  - Each category page should link back to the index page.
+
+### Constraints / must-haves
+1. **Split JSON compatibility must remain** in `tools/report_json_to_html.py`:
+   - Legacy: `--input report.json`
+   - Split: `--input-meta report_meta.json` and `--input-dir <report_folder>`
+   - Reconstruct the same in-memory `report = {..., "metrics": {...}}` structure and reuse plotting logic.
+
+2. **Scoring consistency**:
+   - Must use the shared scoring module (`src/report_scoring.py`) for requirements + total score (do not duplicate scoring logic).
+
+3. **Robustness**:
+   - If a metric category JSON is missing/empty, that category page should still render with a clear “no data” note and the index page should still work.
+   - Keep the existing behavior: if Doppler scatter has no valid pairs, omit it.
+
+4. **Windows-friendly paths**:
+   - Use `pathlib.Path` everywhere.
+
+5. **Backwards behavior**:
+   - The report generation pipeline (`src/report_generator.py`) should still call the HTML tool as best-effort and should now produce:
+     - `report.html` (index)
+     - the 5 category html pages (next to it)
+
+### Implementation guidance (preferred approach)
+Refactor `tools/report_json_to_html.py` minimally:
+
+1. **Split HTML generation into two layers**:
+   - `generate_index_html(report, title, page_links, …) -> str`
+   - `generate_category_html(report, category_key, title, …) -> str`
+
+2. **Reuse existing plotting code**:
+   - Extract a helper that builds figures for a single category, e.g.
+     - `_build_figures_detection(report) -> list[(title, div)]`
+     - `_build_figures_position_accuracy(report) -> …`
+     - etc.
+   - Or modify `_build_figures(report)` to accept an optional `only_categories=set([...])` and filter sections accordingly.
+
+3. **Plotly JS handling**:
+   - Today the single HTML includes Plotly JS inline once.
+   - For multi-page, simplest: each page can include Plotly JS inline (works but heavier).
+   - Better: write one shared `plotly.min.js` file in the report folder and reference it from all pages (optional).
+   - Pick one approach and keep it stable/deterministic.
+
+4. **CLI changes**:
+   - Keep existing CLI flags working.
+   - Add optional flag: `--multi-page` (default **True** if managers want it) or default to multi-page but keep `--single-page` for backward compatibility.
+
+5. **Output naming**:
+   - `--output` should still be supported; it refers to index HTML path.
+   - Category pages should be written alongside the index output with predictable suffixes.
+
+6. **Update `src/report_generator.py`**:
+   - Ensure it still invokes `tools/report_json_to_html.py` and that the tool now writes multiple pages. (No need for generator to know every filename.)
+   - Keep best-effort behavior: evaluation shouldn’t fail if HTML generation fails.
+
+### Acceptance criteria
+- Running the tool in both modes works:
+  - `python tools/report_json_to_html.py --input reports/<run>/report.json`
+  - `python tools/report_json_to_html.py --input-meta reports/<run>/report_meta.json`
+- Outputs written:
+  - Index: `report.html` (score + requirements + links)
+  - Category pages: one per metric category
+- Links between pages work when opened from disk (no server required).
+- The index page shows exactly the same score/requirement statuses as before (uses shared scoring).
+- Ruff/lint stays clean.
+
+### Testing requirements
+- Update/add tests in `tests/test_report_outputs.py` (or a new test file) to validate:
+  - HTML tool produces **index + 5 category pages**
+  - Index contains “Total Score”
+  - Category pages contain `<html` and at least one expected section title when data exists
+- Keep tests lightweight (no full evaluation run required).
+
+### Files likely to modify
+- `tools/report_json_to_html.py` (main change)
+- `src/report_generator.py` (invoke tool as before; no heavy changes)
+- `tests/test_report_outputs.py`
+- `README.md` (update usage examples and explain multi-page layout)
+
+Deliver the changes as a clean implementation with minimal duplication and stable output filenames.

@@ -162,8 +162,12 @@ const tags = ["All", ...new Set(prompts.flatMap((prompt) => prompt.tags))];
     const initialQuery = params.get("q") || "";
     const initialCategory = params.get("category") || "All";
     const initialTag = params.get("tag") || "All";
-    const availableCategories = new Set(categories);
-    const availableTags = new Set(tags);
+    const availableCategories = new Set(
+      categoryButtons.map((button) => button.getAttribute("data-category")).filter(Boolean)
+    );
+    const availableTags = new Set(
+      tagButtons.map((button) => button.getAttribute("data-tag")).filter(Boolean)
+    );
     state.query = initialQuery;
     state.category = availableCategories.has(initialCategory) ? initialCategory : "All";
     state.tag = availableTags.has(initialTag) ? initialTag : "All";

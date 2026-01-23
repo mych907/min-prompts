@@ -21,10 +21,14 @@ const tags = ["All", ...new Set(prompts.flatMap((prompt) => prompt.tags))];
     <aside class="space-y-8 rounded-3xl border border-zinc-200 bg-white/60 p-6 shadow-[0_20px_60px_rgba(15,23,42,0.08)] dark:border-zinc-800 dark:bg-zinc-950/60 dark:shadow-[0_20px_60px_rgba(0,0,0,0.45)]">
       <div class="space-y-4">
         <p class="text-xs uppercase tracking-[0.3em] text-zinc-500 dark:text-zinc-400">Search</p>
+        <label class="sr-only" for="prompt-search">Search prompts</label>
         <input
-          class="w-full rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-800 shadow-inner shadow-zinc-100/80 focus:border-zinc-400 focus:outline-none dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-100 dark:shadow-none"
+          id="prompt-search"
+          name="query"
+          autocomplete="off"
+          class="w-full rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-800 shadow-inner shadow-zinc-100/80 focus:border-zinc-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-900/70 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-100 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-100 dark:shadow-none dark:focus-visible:ring-zinc-100/70 dark:focus-visible:ring-offset-zinc-950"
           type="search"
-          placeholder="Find a prompt..."
+          placeholder="Find a prompt… (e.g., API error handling)"
           data-search-input
         />
       </div>
@@ -34,7 +38,7 @@ const tags = ["All", ...new Set(prompts.flatMap((prompt) => prompt.tags))];
           {categories.map((category) => (
             <button
               type="button"
-              class="rounded-full border border-zinc-200 px-4 py-2 text-[11px] uppercase tracking-[0.2em] text-zinc-600 transition hover:border-zinc-400 hover:text-zinc-900 dark:border-zinc-800 dark:text-zinc-400 dark:hover:border-zinc-600 dark:hover:text-zinc-100"
+              class="rounded-full border border-zinc-200 px-4 py-2 text-[11px] uppercase tracking-[0.2em] text-zinc-600 transition hover:border-zinc-400 hover:text-zinc-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-900/80 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:border-zinc-800 dark:text-zinc-400 dark:hover:border-zinc-600 dark:hover:text-zinc-100 dark:focus-visible:ring-zinc-100/80 dark:focus-visible:ring-offset-zinc-950"
               data-category={category}
               data-category-filter
             >
@@ -49,7 +53,7 @@ const tags = ["All", ...new Set(prompts.flatMap((prompt) => prompt.tags))];
           {tags.map((tag) => (
             <button
               type="button"
-              class="rounded-full border border-zinc-200 px-4 py-2 text-[11px] uppercase tracking-[0.2em] text-zinc-600 transition hover:border-zinc-400 hover:text-zinc-900 dark:border-zinc-800 dark:text-zinc-400 dark:hover:border-zinc-600 dark:hover:text-zinc-100"
+              class="rounded-full border border-zinc-200 px-4 py-2 text-[11px] uppercase tracking-[0.2em] text-zinc-600 transition hover:border-zinc-400 hover:text-zinc-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-900/80 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:border-zinc-800 dark:text-zinc-400 dark:hover:border-zinc-600 dark:hover:text-zinc-100 dark:focus-visible:ring-zinc-100/80 dark:focus-visible:ring-offset-zinc-950"
               data-tag={tag}
               data-tag-filter
             >
@@ -63,7 +67,7 @@ const tags = ["All", ...new Set(prompts.flatMap((prompt) => prompt.tags))];
       <div class="flex items-center justify-between">
         <div>
           <p class="text-xs uppercase tracking-[0.3em] text-zinc-500 dark:text-zinc-400">Recent Prompts</p>
-          <h2 class="text-2xl font-semibold text-zinc-900 dark:text-zinc-100">Engineering Library</h2>
+          <h2 class="text-balance text-2xl font-semibold text-zinc-900 dark:text-zinc-100">Engineering Library</h2>
         </div>
         <div class="rounded-full border border-zinc-200 px-4 py-2 text-[11px] uppercase tracking-[0.2em] text-zinc-500 dark:border-zinc-800 dark:text-zinc-400">
           {prompts.length} prompts
@@ -99,6 +103,15 @@ const tags = ["All", ...new Set(prompts.flatMap((prompt) => prompt.tags))];
       query: "",
       category: "All",
       tag: "All"
+    };
+
+    const syncUrl = () => {
+      const params = new URLSearchParams();
+      if (state.query) params.set("q", state.query);
+      if (state.category !== "All") params.set("category", state.category);
+      if (state.tag !== "All") params.set("tag", state.tag);
+      const next = `${window.location.pathname}${params.toString() ? `?${params}` : ""}`;
+      window.history.replaceState(null, "", next);
     };
 
     const updateActive = (buttons, value, key) => {
@@ -142,7 +155,21 @@ const tags = ["All", ...new Set(prompts.flatMap((prompt) => prompt.tags))];
       if (emptyState) {
         emptyState.toggleAttribute("hidden", visibleCount !== 0);
       }
+      syncUrl();
     };
+
+    const params = new URLSearchParams(window.location.search);
+    const initialQuery = params.get("q") || "";
+    const initialCategory = params.get("category") || "All";
+    const initialTag = params.get("tag") || "All";
+    const availableCategories = new Set(categories);
+    const availableTags = new Set(tags);
+    state.query = initialQuery;
+    state.category = availableCategories.has(initialCategory) ? initialCategory : "All";
+    state.tag = availableTags.has(initialTag) ? initialTag : "All";
+    if (searchInput) {
+      searchInput.value = state.query;
+    }
 
     searchInput?.addEventListener("input", (event) => {
       state.query = event.target.value;
@@ -174,9 +201,9 @@ const tags = ["All", ...new Set(prompts.flatMap((prompt) => prompt.tags))];
       const activeTag = document.querySelector("[data-tag-filter].is-active");
       if (!activeCategory && !activeTag) return;
 
-      const hasFragmentFilter = window.location.hash.includes("category=") ||
-        window.location.hash.includes("tag=");
-      if (!hasFragmentFilter) {
+      const params = new URLSearchParams(window.location.search);
+      const hasQuery = params.has("q") || params.has("category") || params.has("tag");
+      if (!hasQuery) {
         resetFilters();
       }
     };

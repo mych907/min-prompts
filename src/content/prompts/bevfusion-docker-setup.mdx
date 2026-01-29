@@ -98,4 +98,45 @@ ENV TORCH_NVCC_FLAGS="-Xfatbin -compress-all"
 # Additional Note from User
 
 Comment out the line below from mmdet3d/ops/__init__.py and mmdet3d/ops/feature_decorator/__init__.py
- `#from .feature_decorator import feature_decorator`
+`#from .feature_decorator import feature_decorator`
+
+Downgrade numpy
+`pip install "numpy<1.20"`
+
+Install flash attention
+`pip install flash-attn==0.2.0`
+
+Fix the data path
+```
+# 1. Create the data directory in the repo root
+mkdir -p data
+
+# 2. Create the symbolic link. 
+# Based on your docker run command, your data is at /dataset
+ln -s /dataset data/nuscenes
+
+# 3. Verify the link works
+ls -l data/nuscenes/nuscenes_infos_val.pkl
+```
+
+Make the modification as below:
+```python
+info_path = osp.join(info_prefix,
+                     '{}_infos_train_radar.pkl'.format(info_prefix))
+mmcv.dump(data, info_path)
+data['infos'] = val_nusc_infos
+info_val_path = osp.join(info_prefix,
+                         '{}_infos_val_radar.pkl'.format(info_prefix))
+```
+to
+```python
+info_path = osp.join(root_path,
+                     '{}_infos_train.pkl'.format(info_prefix))
+mmcv.dump(data, info_path)
+data['infos'] = val_nusc_infos
+info_val_path = osp.join(root_path,
+                         '{}_infos_val.pkl'.format(info_prefix))
+```
+
+Then run:
+`python tools/data_converter/nuscenes_converter.py`

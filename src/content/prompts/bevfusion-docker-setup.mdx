@@ -1,0 +1,91 @@
+---
+title: "BEVFusion Docker Setup"
+description: "Gemini 3 Pro's guide on how to modify the docker image from bevfusion repo"
+category: "Docker"
+tags: ["Gemini", "Fusion", "Docker", "BEVFusion"]
+---
+
+# User Prompt (Modified)
+
+Cloned the BEVFusion repo and tried to build the dockerfile, but got some errors while building. After some trials, the build was successful but the GPU fails to load. Give me the modified Dockerfile.
+
+`error logs`
+
+# Response
+
+The issue is that when you use `--override-channels` with just `-c pytorch`, Mamba often fails to find the underlying system libraries (like `cudatoolkit` dependencies) that are usually hosted on `conda-forge` or `defaults`. When it can't satisfy the dependency for the GPU version, **it silently falls back to the CPU version**.
+
+The most reliable way to guarantee a GPU version of PyTorch 1.10.1 for CUDA 11.3 in Docker is to **use `pip` with the official NVIDIA wheels**, rather than Conda. This bypasses the solver logic entirely.
+
+Here is the fixed Dockerfile. I have also cleaned up a conflict in your OpenMMLab installation (you were installing both `mmcv` and `mmcv-full`, which breaks things).
+
+### Corrected Dockerfile
+
+```dockerfile
+FROM nvidia/cuda:11.3.1-devel-ubuntu20.04
+
+RUN apt-get update && apt-get install wget -yq
+RUN apt-get install build-essential g++ gcc -y
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get install libgl1-mesa-glx libglib2.0-0 -y
+RUN apt-get install openmpi-bin openmpi-common libopenmpi-dev libgtk2.0-dev git -y
+
+# 1. Setup Miniforge (Python 3.8)
+ENV CONDA_DIR=/opt/conda
+RUN wget --quiet https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-x86_64.sh -O ~/miniforge.sh && \
+     /bin/bash ~/miniforge.sh -b -p /opt/conda
+ENV PATH=$CONDA_DIR/bin:$PATH
+
+RUN mamba install -y python=3.8
+
+# 2. CRITICAL FIX: Install PyTorch via PIP with the CUDA 11.3 wheel.
+# This guarantees you get the GPU version.
+RUN pip install torch==1.10.1+cu113 torchvision==0.11.2+cu113 torchaudio==0.10.1 \
+    -f https://download.pytorch.org/whl/cu113/torch_stable.html
+
+# 3. Install other packages
+RUN pip install Pillow==8.4.0
+RUN pip install tqdm
+RUN pip install torchpack
+RUN pip install nuscenes-devkit
+RUN pip install mpi4py==3.0.3
+RUN pip install numba==0.48.0
+
+# 4. OPTIMIZATION: Install mmcv-full using pre-built wheels.
+# Installing "mmcv" AND "mmcv-full" causes conflicts. Only install mmcv-full.
+# Using the -f link prevents compiling from source (which takes 20 mins).
+RUN pip install mmcv-full==1.4.0 -f https://download.openmmlab.com/mmcv/dist/cu113/torch1.10.0/index.html
+RUN pip install mmdet==2.20.0
+
+# 5. Set Environment variables to ensure setup.py uses CUDA
+ENV FORCE_CUDA="1"
+ENV TORCH_CUDA_ARCH_LIST="6.0 6.1 7.0 7.5 8.0 8.6+PTX"
+ENV TORCH_NVCC_FLAGS="-Xfatbin -compress-all"
+```
+
+### Steps to proceed:
+
+1.  **Rebuild the image:**
+    ```bash
+    docker build -t bevfusion .
+    ```
+
+2.  **Run the container** (Ensure you pass `--gpus all`):
+    ```bash
+    docker run -it --gpus all --shm-size 16g \
+      -v $(pwd):/home/bevfusion \
+      -v /data/datasets/nuscenes/dataset:/dataset \
+      bevfusion /bin/bash
+    ```
+
+3.  **Verify inside the container:**
+    ```bash
+    python -c "import torch; print(torch.cuda.is_available())"
+    # Should print: True
+    ```
+
+4.  **Install BEVFusion:**
+    ```bash
+    cd /home/bevfusion
+    python setup.py develop
+    ```

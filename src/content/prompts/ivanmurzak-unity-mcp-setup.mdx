@@ -1,0 +1,89 @@
+---
+title: "Ivan MurZak Unity MCP Setup"
+description: "Guide on how to setup Unity MCP for Claude Code in WSL"
+category: "Coding"
+tags: ["Agents", "Game", "MCP"]
+---
+
+## MCP Unity Integration
+
+This project uses [MCP Unity](https://github.com/IvanMurzak/Unity-MCP) (`com.ivanmurzak.unity.mcp`) to enable Claude Code to interact directly with the Unity Editor via the Model Context Protocol.
+
+### What It Does
+- Allows Claude to inspect/modify GameObjects, components, and scenes
+- Execute scripts and run tests from Claude Code
+- Access Unity console logs and editor state
+- Create/modify assets, prefabs, and materials
+
+### Package Details
+- **Package**: `com.ivanmurzak.unity.mcp` (v0.44.0+)
+- **Registry**: OpenUPM (`https://package.openupm.com`)
+- **Scopes**: `com.ivanmurzak`, `extensions.unity`, `org.nuget.*`
+
+### Key Files
+```
+/.mcp.json                    # Claude Code MCP server config
+/Packages/manifest.json       # Unity package dependencies (includes scoped registry)
+/Assets/Resources/AI-Game-Developer-Config.json  # MCP Unity config
+/Assets/com.IvanMurzak/       # Installer scripts (editor-only)
+```
+
+### Setup on New Project/Machine
+
+1. **Install the package** (Unity Editor):
+   - Window > Package Manager > + > Add package by name
+   - Enter: `com.ivanmurzak.unity.mcp`
+   - Or add to `Packages/manifest.json`:
+   ```json
+   {
+     "dependencies": {
+       "com.ivanmurzak.unity.mcp": "0.44.0"
+     },
+     "scopedRegistries": [
+       {
+         "name": "package.openupm.com",
+         "url": "https://package.openupm.com",
+         "scopes": [
+           "com.ivanmurzak",
+           "extensions.unity",
+           "org.nuget.com.ivanmurzak",
+           "org.nuget.microsoft",
+           "org.nuget.system",
+           "org.nuget.r3"
+         ]
+       }
+     ]
+   }
+   ```
+
+2. **Configure Claude Code** (create `.mcp.json` in project root):
+   ```json
+   {
+     "mcpServers": {}
+   }
+   ```
+   The MCP Unity package auto-registers itself when Unity Editor is running.
+
+3. **Start MCP Server** - The MCP server should be open in a windows terminal.
+    ```bash
+    C:\Users\mych\Unity\G3\Library\mcp-server\win-x64>.\unity-mcp-server.exe --port 56369 --client-transport http
+    ```
+
+4. **Start Unity Editor** - The Unity Editor is a client that listens to the server.
+
+5. **Use Claude Code** - MCP tools become available (prefixed with `mcp__ai-game-developer__`).
+
+### Available MCP Tools
+| Category | Examples |
+|----------|----------|
+| GameObjects | `gameobject-create`, `gameobject-find`, `gameobject-modify`, `gameobject-destroy` |
+| Components | `gameobject-component-add`, `gameobject-component-get`, `gameobject-component-modify` |
+| Assets | `assets-find`, `assets-create-folder`, `assets-prefab-create`, `assets-material-create` |
+| Scenes | `scene-open`, `scene-save`, `scene-get-data`, `scene-list-opened` |
+| Scripts | `script-read`, `script-update-or-create`, `script-execute` |
+| Editor | `editor-application-get-state`, `console-get-logs`, `tests-run` |
+
+### Troubleshooting
+- **Tools not available**: Ensure Unity Editor is running with the project open
+- **Connection issues**: Check Unity Console for MCP server errors
+- **Package not found**: Verify scoped registry is configured in manifest.json

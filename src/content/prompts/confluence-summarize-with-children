@@ -1,0 +1,13 @@
+---
+title: "Summarize Confluence Document with its Children"
+description: "Provide summary of child documents for each document in the supplied url."
+category: "Confluence"
+tags: ["Agents", "Confluence", "Documentation", "Summary", "MCP"]
+---
+
+In this confluence page, Among the children are documents prefixed with [L2].
+[url-link]
+
+For each L2 documents, update its contents (by appending) with summary of its child contents (which are sometimes prefixed with [L3] but not strictly always).
+Since this task will be repeated, the L2 documents may contain duplicate information.
+Do not append if duplicate.

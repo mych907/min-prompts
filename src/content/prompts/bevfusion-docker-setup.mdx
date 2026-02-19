@@ -54,6 +54,8 @@ RUN pip install torchpack
 RUN pip install nuscenes-devkit
 RUN pip install mpi4py==3.0.3
 RUN pip install numba==0.48.0
+RUN pip install numpy==1.23.5
+RUN pip install flash-attn==0.2.0
 
 # 4. OPTIMIZATION: Install mmcv-full using pre-built wheels.
 # Installing "mmcv" AND "mmcv-full" causes conflicts. Only install mmcv-full.
@@ -119,24 +121,46 @@ ln -s /dataset data/nuscenes
 ls -l data/nuscenes/nuscenes_infos_val.pkl
 ```
 
-Make the modification as below:
-```python
-info_path = osp.join(info_prefix,
-                     '{}_infos_train_radar.pkl'.format(info_prefix))
-mmcv.dump(data, info_path)
-data['infos'] = val_nusc_infos
-info_val_path = osp.join(info_prefix,
-                         '{}_infos_val_radar.pkl'.format(info_prefix))
+Create a file named `fix_pkl_keys.py` in bevfusion root directory:
+
 ```
-to
-```python
-info_path = osp.join(root_path,
-                     '{}_infos_train.pkl'.format(info_prefix))
-mmcv.dump(data, info_path)
-data['infos'] = val_nusc_infos
-info_val_path = osp.join(root_path,
-                         '{}_infos_val.pkl'.format(info_prefix))
+import mmcv
+import os
+
+# The files that need fixing
+files = [
+    'data/nuscenes/nuscenes_infos_train.pkl',
+    'data/nuscenes/nuscenes_infos_val.pkl'
+]
+
+for f in files:
+    if not os.path.exists(f):
+        print(f"Skipping {f} (not found)")
+        continue
+
+    print(f"Checking {f}...")
+    data = mmcv.load(f)
+    dirty = False
+
+    # 1. Rename 'data_list' -> 'infos'
+    if 'data_list' in data:
+        print(f"  - Found 'data_list', renaming to 'infos'...")
+        data['infos'] = data.pop('data_list')
+        dirty = True
+    
+    # 2. Rename 'metainfo' -> 'metadata'
+    if 'metainfo' in data:
+        print(f"  - Found 'metainfo', renaming to 'metadata'...")
+        data['metadata'] = data.pop('metainfo')
+        dirty = True
+
+    if dirty:
+        mmcv.dump(data, f)
+        print(f"  - Saved fixed file: {f}")
+    else:
+        print(f"  - File seems correct (keys 'infos' and 'metadata' present or no new keys found).")
+
+print("Done.")
 ```
 
-Then run:
-`python tools/data_converter/nuscenes_converter.py`
+Run it and 

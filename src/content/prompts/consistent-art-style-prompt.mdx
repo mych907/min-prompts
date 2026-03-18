@@ -1,0 +1,47 @@
+---
+title: "Consistent Art Style Prompt"
+description: "Prompt to generate a consistent style art for image generation AI"
+category: "Coding"
+tags: ["Agents", "Game", "Art"]
+---
+
+
+Base Style Prompt
+
+  Pixel art, 32-color palette, clean readable silhouettes, 1px black outlines.
+  Style: high-fantasy JRPG with vibrant saturated colors and elegant character design.
+  Color palette: rich jewel tones — deep sapphire blues, warm amber golds, emerald greens,
+  soft rose pinks, cool lavenders — against dark navy/charcoal backgrounds.
+  Lighting: soft cel-shaded highlights with warm rim lighting, subtle glow effects on
+  magical elements. No dithering, flat color fills with 2-3 shade steps per hue.
+  Art direction: characters should feel graceful, stylish, and aspirational — flowing hair,
+  detailed ornamental armor/clothing, expressive eyes, dynamic poses.
+  Think "fashion-forward fantasy" — every character looks like they belong on a poster.
+
+  Character Prompt (append to base)
+
+  Single character, centered, full body, facing forward at slight 3/4 angle.
+  Canvas: 128x128 pixels at 1:1 ratio. Transparent background.
+  Character fills ~80% of frame height. Pixel scale: 1 logical pixel = 1 drawn pixel.
+  No anti-aliasing, no sub-pixel rendering. Clean pixel edges.
+  [CHARACTER DESCRIPTION HERE - e.g. "Female paladin healer, white and gold robes,
+  long silver hair, staff with glowing crystal, warm gentle expression"]
+
+  Background Prompt (append to base)
+
+  Environment scene, no characters, wide landscape composition.
+  Canvas: 512x288 pixels at 16:9 ratio. Pixel scale matches 128x128 character sprites
+  (1 pixel = same physical size). Parallax-ready layered composition: distinct foreground,
+  midground, background. Atmospheric depth — lighter/cooler tones in distance.
+  [SCENE DESCRIPTION HERE - e.g. "Ancient forest temple ruins, overgrown stone pillars,
+  shafts of golden light through canopy, glowing moss, mystical atmosphere"]
+
+  Tips for Consistency
+
+  - Always include the base prompt — it locks the palette and style
+  - "32-color palette" and "no dithering" force the AI to stay cohesive across outputs
+  - Pixel dimensions in the prompt help maintain consistent scale, though you should also set the
+  actual output resolution to match (or a 4x multiple like 512x512 for characters)
+  - "1px black outlines" is the single most important consistency anchor
+  - If outputs drift, add: "consistent with previous pieces in this series, unified art style"
+  - For enemy variants, add: "same pixel density and color palette as hero characters"

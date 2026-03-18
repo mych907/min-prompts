@@ -1,0 +1,465 @@
+---
+title: "Sensor MCP Server Generator"
+description: "Generate a specified sensor's MCP for agent tooling"
+category: "Coding"
+tags: ["Agents", "Radar", "MCP"]
+---
+
+# MCP Server Build Prompt — Door Sensor Agentic Test Loop
+
+## Your Role
+
+You are an AI agent tasked with building an MCP (Model Context Protocol) server for a car door sensor development workflow. This MCP server will be used by another AI agent (via Claude or similar) to autonomously run tests, tune parameters, modify source code, build firmware, and collect data from the sensor — forming a closed agentic loop for sensor development.
+
+You are operating inside the sensor's main repository. You must create a **submodule folder** (e.g., `mcp_server/`) containing the MCP server that runs locally.
+
+---
+
+## Context: What This System Does
+
+The sensor is a **door sensor** installed on a car door with a Power Door System (PDS). The sensor detects obstacles and outputs a **stop angle** — when a target is detected as dangerous, the door stops at the given angle automatically. The sensor communicates via **CAN bus** and has a DBC file describing the CAN message definitions.
+
+The ultimate workflow loop is:
+
+1. An AI agent modifies sensor parameters or source code
+2. Builds the firmware
+3. Flashes it to the sensor
+4. Commands the door to open/close
+5. Reads sensor data (detections, objects, stop angle)
+6. Evaluates whether the door stopped correctly
+7. Logs all data
+8. Repeats
+
+This MCP server provides the **tool interface** for that agent to interact with all hardware and software in the loop.
+
+---
+
+## Repository Structure (What You Have)
+
+Explore the repository thoroughly before writing any code. Key things to find:
+
+- **Firmware source code**: The sensor firmware (C for a TI DSP — DSS and MSS subsystems)
+- **`build_all.bat`**: Existing full build script (slow — rebuilds everything). You need to understand this and create a faster alternative that builds only DSS and MSS using Code Composer Studio 10 (CCS10). If building partially with a modified build_all.bat without CCS10 seems viable, you may try this too.
+- **`update_fw.bat`**: Firmware flash/update script. Takes about 35 seconds to update
+- **`set_parameters.bat`**: Parameter update script. Takes about 2 seconds to update
+- **`py_can/` folder**: Python scripts for CAN communication with the sensor, including data logging. Includes many different files with confusing names and legacy codes. The py_can/robot_arm is a subdirectory that has some working communication code with the sensor - may be a good source, but also contains some legacy functions and incompatible robot arm codes. (indy7 robot is no longer in use)
+- **DBC file(s)**: CAN database file(s) describing the message/signal definitions for the sensor's CAN interface. There are multiplie files - you may have to find the right one. There was a dbc update to make the door stop angle output 0~9000 (converted to 0.0~90.0- this is the most recent one)
+- **Any existing Python utilities** for sensor communication, parsing, etc.
+
+**IMPORTANT**: Before implementing any tool, analyze the existing code to understand:
+- How CAN communication works (which Python library? `python-can`? `cantools`?)
+- How the DBC file maps signals to messages
+- What signals carry detection data, object data, stop angle, etc.
+- How the logging scripts work
+- How the build system works (CCS project structure, build commands)
+- What `update_fw.bat` and `set_parameters.bat` actually do under the hood
+
+---
+
+## MCP Server Specifications
+
+### Technology Stack
+
+- **MCP SDK**: Use the official MCP Python SDK (`mcp` package)
+- **Transport**: stdio (for local usage with Claude Desktop or similar)
+- **Language**: Python 3.10+
+- **Dependencies**: Keep minimal. Use existing repo dependencies where possible.
+
+### Folder Structure
+
+Create the following structure:
+
+```
+mcp_server/
+├── README.md              # Setup and usage instructions
+├── requirements.txt       # Python dependencies
+├── pyproject.toml         # Package config with MCP entry point
+├── server.py              # Main MCP server entry point
+├── tools/
+│   ├── __init__.py
+│   ├── firmware.py        # Build and flash tools
+│   ├── sensor.py          # Sensor communication tools
+│   ├── logging_tools.py   # Data logging tools
+│   ├── door.py            # PDS door control (placeholders for now)
+│   └── camera.py          # Camera capture (placeholder for now)
+├── utils/
+│   ├── __init__.py
+│   ├── can_interface.py   # CAN bus wrapper (uses existing py_can code)
+│   └── config.py          # Paths, constants, configuration
+└── config.json            # Runtime config (CAN interface, paths, etc.)
+```
+
+### Configuration (`config.json`)
+
+```json
+{
+  "repo_root": "..",
+  "ccs_install_path": "C:/ti/ccs1010/ccs",
+  "can_interface": "pcan",
+  "can_channel": "PCAN_USBBUS1",
+  "can_bitrate": 500000,
+  "dbc_path": "<auto-detect from repo>",
+  "build_output_path": "<auto-detect from repo>",
+  "log_output_dir": "../logs"
+}
+```
+
+Make paths configurable but auto-detect sensible defaults from the repo structure.
+
+---
+
+## Tool Definitions (MCP Tools to Implement)
+
+### 1. `build_firmware`
+
+**Purpose**: Build the sensor firmware (DSS + MSS only, not the full build_all.bat)
+
+**Implementation**:
+- Analyze `build_all.bat` to understand the full build process
+- Create a streamlined build that only compiles DSS and MSS subsystems using CCS10 command-line tools (`eclipsec.exe` or equivalent)
+- The CCS10 CLI typically supports: `eclipsec.exe -noSplash -data <workspace> -application com.ti.ccstudio.apps.projectBuild -ccs.projects <project_name> -ccs.configuration <Debug/Release>`
+- Find the CCS project files (`.projectspec` or `.project`) in the repo to determine project names
+- Return: build success/failure, build output log, path to generated binary, build duration
+
+**Parameters**:
+- `configuration` (optional, default "Release"): "Debug" or "Release"
+- `clean` (optional, default false): Whether to clean before building
+
+**Important**: The existing `build_all.bat` is slow because it rebuilds redundant components. Your optimized build should be significantly faster.
+
+### 2. `update_firmware`
+
+**Purpose**: Flash new firmware to the sensor
+
+**Implementation**:
+- Wraps the existing `update_fw.bat` script
+- Analyze what `update_fw.bat` does (likely uses UniFlash or a TI flashing tool)
+- Return: flash success/failure, output log
+
+**Parameters**:
+- `binary_path` (optional): Path to binary. If not provided, use the latest build output.
+
+### 3. `set_parameters`
+
+**Purpose**: Update sensor runtime parameters
+
+**Implementation**:
+- Wraps the existing `set_parameters.bat`
+- Analyze how parameters are sent (likely via CAN messages or a serial/UART config interface)
+- Accept a dictionary of parameter name-value pairs
+- Return: success/failure, which parameters were updated
+
+**Parameters**:
+- `parameters` (required): JSON object of `{ "param_name": value, ... }`
+
+**Note**: The parameter hot-reload API allows new parameters to be updated within ~3 seconds without a full firmware reflash. Understand how this works from the existing scripts.
+
+### 4. `get_sensor_status`
+
+**Purpose**: Get current sensor health/status summary
+
+**Implementation**:
+- There is no single "status" API. You need to compose this from available sensor outputs.
+- Read the current CAN messages from the sensor
+- Parse using the DBC file to extract:
+  - Number of current detections
+  - Number of tracked objects
+  - Current stop angle (if any)
+  - Whether the sensor is actively outputting data (alive check)
+- Return: JSON object with status fields
+
+**Parameters**: None
+
+**Return example**:
+```json
+{
+  "alive": true,
+  "num_detections": 12,
+  "num_objects": 3,
+  "stop_angle": null,
+  "timestamp": "2026-03-18T14:30:00"
+}
+```
+
+### 5. `get_sensor_data`
+
+**Purpose**: Get a snapshot of current sensor output data
+
+**Implementation**:
+- Read CAN messages for a short window (e.g., 1-2 frames)
+- Parse all relevant signals: detections, objects, stop angle, etc.
+- Structure the data clearly
+
+**Parameters**:
+- `duration_ms` (optional, default 500): How long to listen for data
+
+**Return**: Full parsed sensor data frame (detections array, objects array, stop angle, raw values)
+
+### 6. `start_logging`
+
+**Purpose**: Begin continuous data logging to file
+
+**Implementation**:
+- Use or wrap the existing logging code in `py_can/`
+- Start a background logging process
+- Log to a timestamped file in the configured log directory
+- Return: log session ID, log file path
+
+**Parameters**:
+- `filename_prefix` (optional): Custom prefix for the log filename
+- `signals` (optional): List of specific signals to log (default: all)
+
+### 7. `stop_logging`
+
+**Purpose**: Stop the current logging session
+
+**Implementation**:
+- Stop the background logging process
+- Finalize the log file
+- Return: log file path, duration, number of frames logged
+
+**Parameters**:
+- `session_id` (optional): If multiple sessions could exist
+
+### 8. `log_for_duration`
+
+**Purpose**: Log data for a specific duration, then auto-stop
+
+**Implementation**:
+- Combines start + timed wait + stop
+- Blocks until logging is complete (or runs async with a completion callback)
+
+**Parameters**:
+- `duration_seconds` (required): How long to log
+- `filename_prefix` (optional): Custom prefix
+
+**Return**: Same as `stop_logging` — log file path, duration, frame count
+
+### 9. `open_door` (PLACEHOLDER)
+
+**Purpose**: Command the PDS to open the door
+
+**Implementation**: For now, return a dummy response.
+
+```python
+async def open_door(speed: str = "normal") -> dict:
+    """Placeholder — PDS not yet acquired"""
+    return {
+        "status": "simulated",
+        "message": "Door open command sent (SIMULATED — PDS not connected)",
+        "speed": speed
+    }
+```
+
+**Parameters**:
+- `speed` (optional): "slow", "normal", "fast"
+- `target_angle` (optional): Target opening angle in degrees
+
+### 10. `close_door` (PLACEHOLDER)
+
+**Purpose**: Command the PDS to close the door
+
+**Implementation**: Dummy response, same pattern as `open_door`.
+
+**Parameters**:
+- `speed` (optional): "slow", "normal", "fast"
+
+### 11. `get_collision_signal` (PLACEHOLDER)
+
+**Purpose**: Check if a collision/stop event was triggered
+
+**Implementation**: Dummy response. Later this will read actual collision feedback from PDS or sensor.
+
+**Return example (dummy)**:
+```json
+{
+  "status": "simulated",
+  "collision_detected": false,
+  "stop_angle": null,
+  "message": "Collision monitoring not yet implemented — PDS not connected"
+}
+```
+
+### 12. `capture_camera` (PLACEHOLDER)
+
+**Purpose**: Capture an image from the test bench camera
+
+**Implementation**: Dummy response. Later this will call a camera API (USB webcam or IP camera).
+
+**Parameters**:
+- `label` (optional): Descriptive label for the capture
+
+**Return (dummy)**:
+```json
+{
+  "status": "simulated",
+  "image_path": null,
+  "message": "Camera capture not yet implemented"
+}
+```
+
+---
+
+## Implementation Guidelines
+
+### CAN Interface Wrapper (`utils/can_interface.py`)
+
+Build a clean wrapper around the existing CAN code:
+
+```python
+class SensorCANInterface:
+    """Wrapper for CAN communication with the sensor."""
+    
+    def __init__(self, config):
+        # Initialize python-can bus with config
+        # Load DBC file using cantools
+        pass
+    
+    def read_messages(self, duration_ms=500) -> list:
+        """Read CAN messages for a given duration."""
+        pass
+    
+    def parse_message(self, msg) -> dict:
+        """Parse a raw CAN message using the DBC definitions."""
+        pass
+    
+    def get_detections(self) -> list:
+        """Parse and return current detection data."""
+        pass
+    
+    def get_objects(self) -> list:
+        """Parse and return current tracked object data."""
+        pass
+    
+    def get_stop_angle(self) -> float | None:
+        """Get current stop angle, or None if no stop commanded."""
+        pass
+    
+    def send_message(self, msg_name, signals: dict):
+        """Send a CAN message (for parameter updates, etc.)."""
+        pass
+```
+
+### Error Handling
+
+Every tool must:
+- Catch exceptions and return structured error responses
+- Never crash the MCP server
+- Return `{"success": false, "error": "descriptive message"}` on failure
+- Include relevant context (e.g., which step failed, partial output)
+
+### Process Management
+
+For firmware builds and logging:
+- Use `asyncio.subprocess` for non-blocking execution
+- Capture stdout/stderr
+- Implement timeouts (build shouldn't hang forever)
+- For logging, manage background tasks properly (start/stop lifecycle)
+
+### Logging Session State
+
+The server needs to track active logging sessions:
+
+```python
+class LoggingSessionManager:
+    """Manages active logging sessions."""
+    
+    active_sessions: dict[str, LoggingSession] = {}
+    
+    async def start(self, prefix, signals) -> str:
+        """Start a new session, return session_id."""
+        pass
+    
+    async def stop(self, session_id) -> dict:
+        """Stop a session, return summary."""
+        pass
+```
+
+---
+
+## MCP Server Entry Point (`server.py`)
+
+```python
+from mcp.server import Server
+from mcp.server.stdio import stdio_server
+
+app = Server("door-sensor-dev")
+
+# Register all tools via @app.tool() decorators
+# ...
+
+async def main():
+    async with stdio_server() as (read_stream, write_stream):
+        await app.run(read_stream, write_stream, app.create_initialization_options())
+
+if __name__ == "__main__":
+    import asyncio
+    asyncio.run(main())
+```
+
+---
+
+## Testing Checklist
+
+During development, the physical sensor will be connected. Test each tool:
+
+1. **`get_sensor_status`** — Does it return live data? Are detections/objects counts reasonable?
+2. **`get_sensor_data`** — Can you see parsed CAN signals? Do field names match the DBC?
+3. **`start_logging` → `stop_logging`** — Does it create a log file? Is data written?
+4. **`log_for_duration`** — Does it log for the correct time and auto-stop?
+5. **`set_parameters`** — Does the sensor acknowledge parameter changes?
+6. **`build_firmware`** — Does it build successfully with CCS10? Is the build faster than `build_all.bat`?
+7. **`update_firmware`** — Does the sensor come back online after flashing?
+8. **Placeholder tools** — Do they return the expected dummy responses?
+
+### Quick Smoke Test Sequence
+
+```
+get_sensor_status → should show alive=true
+get_sensor_data → should return detections/objects
+log_for_duration(5) → should create a log file with ~5s of data
+set_parameters({"some_param": value}) → should succeed
+build_firmware → should complete without errors
+update_firmware → sensor should restart and respond to get_sensor_status again
+```
+
+---
+
+## Expected User Scenarios (MCP Tool Call Sequences)
+
+### Scenario 1: Parameter Tuning Loop
+
+```
+1. set_parameters({"detection_threshold": 0.5, "min_object_size": 3})
+2. get_sensor_status()                    # verify sensor is alive after param change
+3. get_sensor_data(duration_ms=1000)      # observe effect of new parameters
+4. [Agent evaluates data, decides next parameter adjustment]
+5. Repeat from 1
+```
+
+### Scenario 2: Full Build-Test-Iterate Loop
+
+```
+1. start_logging(filename_prefix="test_run_001")
+2. open_door(speed="normal")              # (placeholder for now)
+3. [wait for door cycle]
+4. close_door()                           # (placeholder for now)
+5. stop_logging()                         # returns log file path
+6. [Agent analyzes log data, decides to modify source code]
+7. [Agent edits source code files directly in the repo]
+8. build_firmware(configuration="Release")
+9. update_firmware()
+10. get_sensor_status()                   # verify sensor is alive
+11. Repeat from 1
+```
+
+---
+
+## Important Notes
+
+- **Do NOT modify existing repo files** outside of the `mcp_server/` folder. The MCP server is a submodule that wraps existing functionality.
+- **Analyze before implementing**. Spend time reading the existing scripts, DBC files, and Python code. The right implementation depends on understanding what's already there. You have the sensor connected, and it is constantly communicating data via CAN. You may verify the API with this information.
+- **The DBC file is your source of truth** for CAN signal names, message IDs, and data encoding. Use `cantools` to parse it.
+- **Windows environment**: The repo likely runs on Windows (CCS10, .bat scripts, PCAN). Make sure paths and process calls are Windows-compatible.
+- **CCS10 command-line**: Code Composer Studio 10 supports headless builds via `eclipsec.exe`. Find the CCS installation and construct the right CLI command.
+- **Keep placeholder tools simple** but with the correct function signature so they can be filled in later without changing the MCP interface.
